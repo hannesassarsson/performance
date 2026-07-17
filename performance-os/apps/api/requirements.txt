@@ -1,0 +1,14 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+sqlalchemy>=2.0
+psycopg2-binary>=2.9
+pydantic>=2.7
+pydantic-settings>=2.3
+pyjwt[crypto]>=2.8
+cryptography>=42.0
+redis>=5.0
+
+# Garmin integration — pin these, this ecosystem breaks without warning
+garminconnect>=0.3.4
+curl_cffi
+ua-generator
