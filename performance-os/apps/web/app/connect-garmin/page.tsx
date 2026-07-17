@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { useAuth } from "@clerk/nextjs";
 
 const API = process.env.NEXT_PUBLIC_API_URL;
 
 type ConnectStatus = "idle" | "pending" | "mfa_required" | "success" | "error";
 
 export default function ConnectGarminPage() {
+  const { getToken } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mfaCode, setMfaCode] = useState("");
@@ -14,31 +16,36 @@ export default function ConnectGarminPage() {
   const [status, setStatus] = useState<ConnectStatus>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // NOTE: no Authorization header attached yet — see note in page.tsx.
-  // Every one of these calls needs `Bearer ${clerkToken}` once Clerk is wired in.
+  async function authedFetch(path: string, options: RequestInit = {}) {
+    const token = await getToken();
+    return fetch(`${API}${path}`, {
+      ...options,
+      headers: {
+        ...(options.headers ?? {}),
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+  }
 
   async function startConnect(e: React.FormEvent) {
     e.preventDefault();
     setStatus("pending");
-    const res = await fetch(`${API}/api/v1/providers/garmin/connect`, {
+    const res = await authedFetch("/api/v1/providers/garmin/connect", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
-    const data = await res.json();
-    handleResult(data);
+    handleResult(await res.json());
   }
 
   async function submitMfa(e: React.FormEvent) {
     e.preventDefault();
     if (!attemptId) return;
-    const res = await fetch(`${API}/api/v1/providers/garmin/connect/${attemptId}/mfa`, {
+    const res = await authedFetch(`/api/v1/providers/garmin/connect/${attemptId}/mfa`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code: mfaCode }),
     });
-    const data = await res.json();
-    handleResult(data);
+    handleResult(await res.json());
   }
 
   function handleResult(data: {
@@ -50,15 +57,13 @@ export default function ConnectGarminPage() {
     setStatus(data.status);
     if (data.status === "error") setErrorMessage(data.error_message ?? "Unknown error");
     if (data.status === "pending") {
-      // Simple poll loop — replace with exponential backoff for production
       setTimeout(() => pollStatus(data.attempt_id), 2000);
     }
   }
 
   async function pollStatus(id: string) {
-    const res = await fetch(`${API}/api/v1/providers/garmin/connect/${id}/status`);
-    const data = await res.json();
-    handleResult(data);
+    const res = await authedFetch(`/api/v1/providers/garmin/connect/${id}/status`);
+    handleResult(await res.json());
   }
 
   return (

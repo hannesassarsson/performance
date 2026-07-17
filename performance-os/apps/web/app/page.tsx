@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAuth } from "@clerk/nextjs";
 
 type Activity = {
   id: string;
@@ -12,23 +13,30 @@ type Activity = {
 };
 
 export default function DashboardPage() {
+  const { getToken, isLoaded, isSignedIn } = useAuth();
   const [activities, setActivities] = useState<Activity[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // NOTE: this is intentionally bare-bones — no Clerk token attached yet.
-    // Once Clerk is wired in (apps/web needs a real <ClerkProvider> in
-    // layout.tsx plus middleware.ts), replace this with:
-    //   const token = await getToken();
-    //   fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/activities`)
-      .then((res) => {
+    if (!isLoaded) return; // Clerk still figuring out auth state — wait
+    if (!isSignedIn) {
+      setError(null);
+      return;
+    }
+
+    (async () => {
+      try {
+        const token = await getToken();
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/activities`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (!res.ok) throw new Error(`API returned ${res.status}`);
-        return res.json();
-      })
-      .then(setActivities)
-      .catch((err) => setError(err.message));
-  }, []);
+        setActivities(await res.json());
+      } catch (err: any) {
+        setError(err.message);
+      }
+    })();
+  }, [isLoaded, isSignedIn, getToken]);
 
   return (
     <main className="p-8 max-w-2xl mx-auto">
@@ -38,12 +46,20 @@ export default function DashboardPage() {
         The real dashboard design is Step 7.
       </p>
 
-      <a
-        href="/connect-garmin"
-        className="inline-block mb-6 px-4 py-2 rounded-lg bg-white text-black text-sm font-medium"
-      >
-        Connect Garmin
-      </a>
+      {!isSignedIn && isLoaded && (
+        <p className="text-neutral-500 text-sm mb-4">
+          Sign in (top right) to see your data.
+        </p>
+      )}
+
+      {isSignedIn && (
+        <a
+          href="/connect-garmin"
+          className="inline-block mb-6 px-4 py-2 rounded-lg bg-white text-black text-sm font-medium"
+        >
+          Connect Garmin
+        </a>
+      )}
 
       {error && (
         <p className="text-red-400 text-sm mb-4">
@@ -53,7 +69,7 @@ export default function DashboardPage() {
       )}
 
       <div className="space-y-2">
-        {activities.length === 0 && !error && (
+        {isSignedIn && activities.length === 0 && !error && (
           <p className="text-neutral-500 text-sm">
             No activities yet — connect Garmin and trigger a sync.
           </p>
